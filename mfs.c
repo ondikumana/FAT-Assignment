@@ -1,9 +1,14 @@
+/*
+  Name: Olivier Ndikumana
+  ID: 1001520973
+*/
+
 #include <stdio.h>
-#include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
 FILE *fp;
 
@@ -28,13 +33,16 @@ FILE *fp;
 #define BS_Vollab_Offset 71
 #define BS_Vollab_Size 11
 
+#define Volume_Name_Offset 71 // volume label/name offset
+#define Volume_Name_Size 11  // volume length
+
 #define MAX_FILE_NAME_SIZE 20
 #define MAX_COMMAND_SIZE 200
 #define MAX_NUM_ARGUMENTS 5
 #define WHITESPACE " \t\n"
 
-#define NUMBER_OF_ENTRIES 16
-#define LENTH_OF_DIR_NAME 11
+#define NUMBER_OF_ENTRIES 16 // fixed number of entries
+#define LENTH_OF_DIR_NAME 11 // fixed length of directory/file name
 
 struct __attribute__((__packed__)) DirectoryEntry {
   char DIR_Name[11];
@@ -57,7 +65,9 @@ uint16_t BPB_RootEntCnt;
 uint32_t RootClusAddress;
 uint32_t currentClusAddress;
 char BS_Vollab[11];
-char * currentlyOpenFileName;
+char Volume_Name[11];
+
+char * currentlyOpenFileName; // contains the name of currently open file
 
 int16_t nextLB(uint32_t sector) {
   uint32_t FATAddress = (BPB_BytesPerSec * BPB_RsvdSecCnt) + (sector * 4);
@@ -67,60 +77,77 @@ int16_t nextLB(uint32_t sector) {
   return val;
 }
 
-void printInfo() {
-
+void getInfo() {
+  /* This function reads the img given the offsets and finds the appropriate values*/
   if (!fp) return;
   //BPB_BytesPerSec
   fseek(fp, BPB_BytesPerSec_Offset, SEEK_SET);
   fread(&BPB_BytesPerSec, BPB_BytesPerSec_Size, 1, fp);
 
-  printf("BPB_BytesPerSec: %d %x\n", BPB_BytesPerSec, BPB_BytesPerSec);
-
   //BPB_SecPerClus
   fseek(fp, BPB_SecPerClus_Offset, SEEK_SET);
   fread(&BPB_SecPerClus, BPB_SecPerClus_Size, 1, fp);
-
-  printf("BPB_SecPerClus: %d %x\n", BPB_SecPerClus, BPB_SecPerClus);
 
   //BPB_RsvdSecCnt
   fseek(fp, BPB_RsvdSecCnt_Offset, SEEK_SET);
   fread(&BPB_RsvdSecCnt, BPB_RsvdSecCnt_Size, 1, fp);
 
-  printf("BPB_RsvdSecCnt: %d %x\n", BPB_RsvdSecCnt, BPB_RsvdSecCnt);
-
   //BPB_NumFATs
   fseek(fp, BPB_NumFATs_Offset, SEEK_SET);
   fread(&BPB_NumFATs, BPB_NumFATs_Size, 1, fp);
-
-  printf("BPB_NumFATs: %d %x\n", BPB_NumFATs, BPB_NumFATs);
 
   //BPB_RootEntCnt
   fseek(fp, BPB_RootEntCnt_Offset, SEEK_SET);
   fread(&BPB_RootEntCnt, BPB_RootEntCnt_Size, 1, fp);
 
-  printf("BPB_RootEntCnt: %d %x\n", BPB_RootEntCnt, BPB_RootEntCnt);
-
   //BPB_FATSz32
   fseek(fp, BPB_FATSz32_Offset, SEEK_SET);
   fread(&BPB_FATSz32, BPB_FATSz32_Size, 1, fp);
-
-  printf("BPB_FATSz32: %d %x\n", BPB_FATSz32, BPB_FATSz32);
 
   //BS_Vollab
   fseek(fp, BS_Vollab_Offset, SEEK_SET);
   fread(&BS_Vollab, BS_Vollab_Size, 1, fp);
 
+  //Volume Name
+  fseek(fp, Volume_Name_Offset, SEEK_SET);
+  fread(&Volume_Name, Volume_Name_Size, 1, fp);
+
   // sets RootClusAddress
   RootClusAddress = currentClusAddress = (BPB_NumFATs * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+}
+
+void printInfo() {
+  /* This function prints the info from getInfo(). excluding some of them like volume name */
+
+  if (!fp) return;
+
+  //BPB_BytesPerSec
+  printf("BPB_BytesPerSec: %d %x\n", BPB_BytesPerSec, BPB_BytesPerSec);
+
+  //BPB_SecPerClus
+  printf("BPB_SecPerClus: %d %x\n", BPB_SecPerClus, BPB_SecPerClus);
+
+  //BPB_RsvdSecCnt
+  printf("BPB_RsvdSecCnt: %d %x\n", BPB_RsvdSecCnt, BPB_RsvdSecCnt);
+
+  //BPB_NumFATs
+  printf("BPB_NumFATs: %d %x\n", BPB_NumFATs, BPB_NumFATs);
+
+  //BPB_RootEntCnt
+  printf("BPB_RootEntCnt: %d %x\n", BPB_RootEntCnt, BPB_RootEntCnt);
+
+  //BPB_FATSz32
+  printf("BPB_FATSz32: %d %x\n", BPB_FATSz32, BPB_FATSz32);
 
 }
 
 void readDirectory(int clusAddress) {
+  /* This function reads a directory given the cluster address. It assumes that there are only going to be 16 entries */
   if (!clusAddress) return;
   // reads directory adding it to dir struct array
   fseek( fp, clusAddress, SEEK_SET);
   int i;
-  for (i = 0; i < 16; i++) {
+  for (i = 0; i < NUMBER_OF_ENTRIES; i++) {
     fread(&dir[i], sizeof(struct DirectoryEntry), 1, fp);
   }
 }
@@ -151,6 +178,7 @@ int LBAToOffset(int32_t sector) {
 }
 
 void makeUpperCase(char *word) {
+  /*Makes any string into upper case*/
   int i = 0;
   while(word[i]) {
       word[i] = toupper( word[i] );
@@ -159,6 +187,7 @@ void makeUpperCase(char *word) {
 }
 
 void makeLowerCase(char *word) {
+  /*Makes any string into lower case*/
   int i = 0;
   while(word[i]) {
       word[i] = tolower( word[i] );
@@ -167,6 +196,7 @@ void makeLowerCase(char *word) {
 }
 
 char* makeIntoDirName(char *fileName) {
+  /*This function takes the string given by user and farmats it to look like the ones in the fat32 img*/
   int i, j, fileNameLength = strlen(fileName);
 
   // decides if it's a directory or file by checking whether it has a .
@@ -210,7 +240,7 @@ char* makeIntoDirName(char *fileName) {
 }
 
 void makeIntoProperName(char *fileName) {
-
+/*Makes directory name or file name in the fat32 image into proper format that can be used ouside of the image*/
   makeLowerCase(fileName);
 
   int lengthOfFileName = strlen(fileName);
@@ -247,11 +277,12 @@ void openFile(char *fileName) {
     fp = fopen( fileName, "r");
 
     if (fp == NULL) {
-      perror("Error opening file: ");
+      perror("Error opening file");
     }
     else {
       currentlyOpenFileName = (char*) malloc( strlen(fileName) * sizeof(char) );
       strcpy(currentlyOpenFileName, fileName);
+      getInfo();
     }
   }
 
@@ -259,8 +290,11 @@ void openFile(char *fileName) {
 }
 
 void closeFile() {
+  /*Closes file and set file pointer to null that way no other operation can take place*/
   if (fp) {
     fclose(fp);
+    free(currentlyOpenFileName);
+    fp = NULL;
   }
   else {
     printf("Error: File system image must be opened first.\n");
@@ -268,7 +302,7 @@ void closeFile() {
 }
 
 int findIndexOfFile(int clusAddress, char *fileName) {
-  // finds file in clusAddress or returns NULL
+  /* finds file given clusAddress or returns NULL if file or directory does not exist in that cluster */
   if (!clusAddress) return -1;
 
   readDirectory(clusAddress);
@@ -290,6 +324,9 @@ int findIndexOfFile(int clusAddress, char *fileName) {
 }
 
 void printStat(char *fileName) {
+  /*prints info about a file or directory in the current cluster address given the file name*/
+  if (!fp) return;
+
   int index = findIndexOfFile(currentClusAddress, fileName);
   if (index != -1) {
     printf("Attribute: %d\n", dir[index].Dir_Attr);
@@ -300,6 +337,17 @@ void printStat(char *fileName) {
 }
 
 void getFile(char *fileName) {
+  /*Finds file in current cluster address then copies it's character content to the directory outside of the fat32 img*/
+  if (!fp) return;
+
+  int fileNameLength = strlen(fileName);
+  int isDirectory = fileName[fileNameLength - 4] == '.' ? 0 : 1;
+
+  if (isDirectory) {
+    printf("Error: Cannot get directory\n");
+    return;
+  }
+
   int fileIndex = findIndexOfFile(currentClusAddress, fileName);
 
   if (fileIndex == -1) {
@@ -349,6 +397,9 @@ void getFile(char *fileName) {
 }
 
 void readFile(char *fileName, char* position, char* numberOfBytes) {
+  /*Reads the hex content of the file given the offset, file name and number of bytes*/
+  if (!fp) return;
+
   int fileIndex = findIndexOfFile(currentClusAddress, fileName);
 
   if (fileIndex == -1) {
@@ -370,7 +421,9 @@ void readFile(char *fileName, char* position, char* numberOfBytes) {
 
   fread(&buffer, postionInt + numberOfBytesInt, 1, fp);
 
-  for (int i = postionInt; i < postionInt + numberOfBytesInt; i++) {
+  int i;
+
+  for (i = postionInt; i < postionInt + numberOfBytesInt; i++) {
     printf("%x ", buffer[i]);
   }
   printf("\n");
@@ -378,11 +431,15 @@ void readFile(char *fileName, char* position, char* numberOfBytes) {
 }
 
 void listFiles() {
+    if (!fp) return;
     readDirectory(currentClusAddress);
     printFilesInDir();
 }
 
 void changeDirectory(char *directoryName) {
+  /*changes to directory in current cluster address if the directory exists.
+    When going back, it assumes that the parent of the directory is the entry in position 1 of the dir array*/
+  if (!fp) return;
 
   if (strcmp(directoryName, "..") == 0) {
 
@@ -414,6 +471,17 @@ void changeDirectory(char *directoryName) {
   int lowClusterNumber = dir[directoryIndex].DIR_FirstClusterLow;
 
   currentClusAddress = LBAToOffset(lowClusterNumber);
+}
+
+void printVolumeName() {
+  /*prints the volume label of the fat32 image using offset, size and array from getInfo() and beginning declarations*/
+  if (!fp) return;
+
+  if (Volume_Name[0])
+    printf("Volume Name is '%s'\n", Volume_Name);
+  else
+    printf("Error: volume name not found.\n");
+
 }
 
 int main() {
@@ -462,8 +530,7 @@ int main() {
       //checks for open command
       if ( strcmp(token[0], "open") == 0 ) {
         //checks if there's a file name then calls the openFile function
-        // if (token[1]) openFile(token[1]);
-        openFile("fat32.img");
+        if (token[1]) openFile(token[1]);
       }
 
       //checks for close command
@@ -484,18 +551,25 @@ int main() {
         if (token[1]) getFile(token[1]);
       }
 
+      //checks for read command
       else if (strcmp(token[0], "read") == 0) {
         //checks if there's a file name first then calls the readFile function
         if (token[1] && token[2] && token[3]) readFile(token[1], token[2], token[3]);
       }
+      //checks for ls command
+      else if (strcmp(token[0], "ls") == 0) listFiles();
 
-      else if (strcmp(token[0], "ls") == 0)
-        //checks if there's a file name first then calls the listFiles function
-        listFiles();
-
-      else if (strcmp(token[0], "cd") == 0)
+      //checks for change directory command
+      else if (strcmp(token[0], "cd") == 0) {
         //checks if there's a file name first then calls the listFiles function
         if (token[1]) changeDirectory(token[1]);
+      }
+
+      //checks volume command
+      else if (strcmp(token[0], "volume") == 0) printVolumeName();
+
+      //checks exist command
+      else if (strcmp(token[0], "exit") == 0 || strcmp(token[0], "quit") == 0) break;
 
     }
 
